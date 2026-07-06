@@ -1,6 +1,6 @@
-docs: split README into EN/JA pair with language links
+docs: switch to Japanese-main README (README.md JA, README-en.md EN)
 
-- Rewrite README.md in English with language-switch header
-- Add README-ja.md (Japanese) with language-switch header
+- Make README.md the Japanese main with [Japanese]|[English] header
+- Add README-en.md for English, remove README-ja.md
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>

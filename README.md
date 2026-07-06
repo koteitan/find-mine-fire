@@ -1,64 +1,63 @@
-[English](README.md) | [Japanese](README-ja.md)
+[Japanese](README.md) | [English](README-en.md)
 
 # find mine fire 🔥
 
-A toolset that collects any nostr user's `kind:1` / `kind:6` events from remote
-relays into a local strfry relay and offers **blazing-fast incremental search
-via SQLite (FTS5)**.
+任意の nostr ユーザーの `kind:1` / `kind:6` をリモートリレーからローカルの
+strfry リレーへ収集し、**SQLite (FTS5) で爆速インクリメンタルサーチ**するツール一式。
 
-The **source npub and relays are given as arguments** (defaults: koteitan / x.kojira.io).
+取得元の **npub とリレーは引数で指定**する（デフォルトは koteitan / x.kojira.io）。
 
-## How it works
-- **Sync**: NIP-77 Negentropy (`strfry sync`) — pulls only the diff efficiently and practically sidesteps rate limits.
-- **strfry**: uses a native `strfry` if it is on PATH, otherwise falls back to Docker (`dockurr/strfry`).
-- **Search**: events are indexed into `web/events.sqlite` (FTS5 trigram) and queried in the browser via sqlite-wasm.
+## 仕組み
+- **同期**: NIP-77 Negentropy (`strfry sync`)。差分だけを効率的に取得し rate limit を実質回避。
+- **strfry**: ネイティブの `strfry` が PATH にあればそれを、無ければ Docker (`dockurr/strfry`) を使用。
+- **検索**: イベントを `web/events.sqlite`(FTS5 trigram) に索引化し、ブラウザの sqlite-wasm で検索。
 
-## Files
-| file | role |
+## ファイル
+| file | 役割 |
 |------|------|
-| `lib.sh` | shared helpers (npub→hex decode / filter build / strfry runner) |
-| `strfry.conf` | local relay config (DB=`./strfry-db/`, port 7777) |
-| `sync.sh` | Negentropy sync from remote into the local DB |
-| `build-db.sh` / `build-db.py` | build `web/events.sqlite` (FTS5) from the local DB |
-| `stats.sh` / `stats.py` | print statistics about collected events |
-| `run-relay.sh` | start the local relay (ws://localhost:7777) to serve events |
-| `web/` | search page (`index.html` / `style.css` / `vendor/` sqlite-wasm) |
+| `lib.sh` | 共通処理（npub→hex デコード / フィルタ生成 / strfry ランナー） |
+| `strfry.conf` | ローカルリレー設定（DB=`./strfry-db/`, port 7777） |
+| `sync.sh` | リモート → ローカル DB へ Negentropy 同期 |
+| `build-db.sh` / `build-db.py` | ローカル DB → `web/events.sqlite` (FTS5) を生成 |
+| `stats.sh` / `stats.py` | 収集イベントの統計を表示 |
+| `run-relay.sh` | ローカルリレー(ws://localhost:7777)を起動して配信 |
+| `web/` | 検索ページ（`index.html` / `style.css` / `vendor/` sqlite-wasm） |
 
-## Usage
+## 使い方
 ```bash
-# 1) Collect (pass an npub and one or more relays; multiple relays are visited in order)
+# 1) 収集（npub と 1つ以上のリレーを引数で指定。複数指定で順に巡回）
 ./sync.sh npub1f3w4x7... wss://x.kojira.io wss://yabu.me wss://relay.damus.io
 
-# 2) Statistics
+# 2) 統計
 ./stats.sh npub1f3w4x7...
 
-# 3) Build the search index
+# 3) 検索インデックスを生成
 ./build-db.sh npub1f3w4x7...
 
-# 4) Serve web/ over a local HTTP server and open index.html
-#    (file:// breaks sqlite's fetch, so always use HTTP; avoid ports 8000/8080)
+# 4) web/ をローカル HTTP サーバで配信して index.html を開く
+#    （file:// では sqlite の fetch が失敗するので必ず HTTP 経由。8000/8080 以外）
 
-# To serve as a local relay
+# ローカルリレーとして配信したい場合
 ./run-relay.sh
 ```
-Omitting the argument falls back to `NPUB_DEFAULT` / `RELAY_DEFAULT` (koteitan / x.kojira.io).
-A raw hex pubkey may be passed instead of an npub.
+引数を省略すると `NPUB_DEFAULT` / `RELAY_DEFAULT`（koteitan / x.kojira.io）が使われる。
+hex の pubkey をそのまま渡してもよい。
 
-### Environment variables
-- `SYNC_DIR=down|up|both` … sync direction (default: down)
-- `KINDS_DEFAULT=1,6` … kinds to collect
-- `SOURCE_RELAY` … default relay when no relay argument is given
-- `FORCE_DOCKER=1` … use Docker even if a native strfry exists
+### 環境変数
+- `SYNC_DIR=down|up|both` … 同期方向（既定 down）
+- `KINDS_DEFAULT=1,6` … 収集する kind
+- `SOURCE_RELAY` … リレー引数が無いときのデフォルト
+- `FORCE_DOCKER=1` … ネイティブ strfry があっても Docker を使う
 
-## Search behavior
-- 3+ characters: FTS5 trigram index (a few ms; works with Japanese)
-- 1–2 characters: falls back to a LIKE scan
-- filter by kind:1 / kind:6, each result links to njump
-- `web/vendor/sqlite3.{mjs,wasm}` bundles the official sqlite-wasm with FTS5 enabled (works offline)
+## 検索の挙動
+- 3文字以上: FTS5 trigram 索引で検索（数ms・日本語OK）
+- 1〜2文字: LIKE スキャンにフォールバック
+- kind:1 / kind:6 で絞り込み、各結果から njump へリンク
+- `web/vendor/sqlite3.{mjs,wasm}` は FTS5 有効な公式 sqlite-wasm を同梱（オフライン動作）
 
-## Notes
-- Check a relay's rate limit via NIP-11: `curl -H "Accept: application/nostr+json" <https-url>`
-- `strfry.conf` sets `rejectEventsOlderThanSeconds` to 100 years
-  (the default 3 years makes `strfry sync` silently drop posts older than 3 years).
-- `strfry-db/` (raw LMDB) and `web/events.sqlite` (generated) are git-ignored.
-  To serve on GitHub Pages etc., include the data with `git add -f web/events.sqlite`.
+## メモ
+- リレーの rate limit は NIP-11 で確認: `curl -H "Accept: application/nostr+json" <https-url>`
+- `strfry.conf` の `rejectEventsOlderThanSeconds` は 100 年に設定済み
+  （既定の3年だと `strfry sync` が3年より古い投稿を静かに捨てるため）
+- `strfry-db/`（生の LMDB）と `web/events.sqlite`（生成物）は git 管理外。
+  GitHub Pages 等で配信する場合は `git add -f web/events.sqlite` でデータも含める。
