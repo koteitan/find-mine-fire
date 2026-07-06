@@ -1,6 +1,6 @@
 [Japanese](README.md) | [English](README-en.md)
 
-# find mine fire 🔥
+# find mine fire🔥
 
 **自分の** nostr の `kind:1` / `kind:6` をリモートリレーからローカルの
 strfry リレーへ収集し、**SQLite (FTS5) で爆速インクリメンタルサーチ**する

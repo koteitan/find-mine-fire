@@ -1,6 +1,6 @@
 [Japanese](README.md) | [English](README-en.md)
 
-# find mine fire 🔥
+# find mine fire🔥
 
 A **local tool for ubuntu** that collects **your own** nostr `kind:1` / `kind:6`
 events from remote relays into a local strfry relay and offers **blazing-fast
