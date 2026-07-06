@@ -1,5 +1,5 @@
-docs: reword description to "your own" nostr posts
+docs: add screenshot thumbnails to READMEs
 
-- Change "any nostr user's" to "your own" in README.md / README-en.md
+- Add img/screenshot-ja.png to README.md and img/screenshot-en.png to README-en.md
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>

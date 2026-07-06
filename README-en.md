@@ -8,6 +8,8 @@ incremental search via SQLite (FTS5)**. It runs as a **local server or on the CL
 
 The **source npub and relays are given as arguments** (**required**; it errors out if missing).
 
+![find mine fire screenshot](img/screenshot-en.png)
+
 ## How it works
 - **Sync**: NIP-77 Negentropy (`strfry sync`) — pulls only the diff efficiently and practically sidesteps rate limits.
 - **strfry**: uses a native `strfry` if it is on PATH, otherwise falls back to Docker (`dockurr/strfry`).

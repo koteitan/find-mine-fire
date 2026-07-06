@@ -8,6 +8,8 @@ strfry リレーへ収集し、**SQLite (FTS5) で爆速インクリメンタル
 
 取得元の **npub とリレーは引数で指定**する（**必須**。指定が無いとエラー）。
 
+![find mine fire スクリーンショット](img/screenshot-ja.png)
+
 ## 仕組み
 - **同期**: NIP-77 Negentropy (`strfry sync`)。差分だけを効率的に取得し rate limit を実質回避。
 - **strfry**: ネイティブの `strfry` が PATH にあればそれを、無ければ Docker (`dockurr/strfry`) を使用。
