@@ -2,7 +2,7 @@
 
 # find mine fire 🔥
 
-任意の nostr ユーザーの `kind:1` / `kind:6` をリモートリレーからローカルの
+**自分の** nostr の `kind:1` / `kind:6` をリモートリレーからローカルの
 strfry リレーへ収集し、**SQLite (FTS5) で爆速インクリメンタルサーチ**する
 **ubuntu 用ローカルツール**です。**ローカルサーバー or CLI** で動きます。
 

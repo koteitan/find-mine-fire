@@ -1,8 +1,5 @@
-feat: add findmine CLI; require npub/relay args; refine description
+docs: reword description to "your own" nostr posts
 
-- Add findmine: terminal incremental search (curses TUI + one-shot) over web/events.sqlite
-- Require npub/relay args in sync.sh/build-db.sh/stats.sh; error out with no built-in defaults
-- lib.sh: drop koteitan/x.kojira.io defaults, add die() helper
-- README: describe as ubuntu-local tool (local server or CLI), document findmine
+- Change "any nostr user's" to "your own" in README.md / README-en.md
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
