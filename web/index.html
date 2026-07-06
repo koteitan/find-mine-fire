@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>find mine fire 🔥</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%94%A5%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+  <script>
+    // Apply theme before first paint to avoid flash. Default is dark.
+    (function(){
+      var d = localStorage.getItem("darkmode");
+      if(d === null || d == "1"){ document.documentElement.classList.add("dark"); }
+    })();
+  </script>
+</head>
+<body>
+  <header class="page-header">
+    <h1>find mine fire 🔥</h1>
+    <div class="menu-container" id="menuContainer">
+      <button type="button" class="menu-toggle" id="menuToggle" aria-label="Menu">&#9776;</button>
+      <div class="menu-dropdown" id="menuDropdown">
+        <div class="menu-section">
+          <div class="checkbox-group">
+            <input id="darkmode_d" type="checkbox">
+            <label for="darkmode_d">Dark mode</label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="search-container">
+    <input id="q" type="search" placeholder="検索…（部分一致・日本語OK）" autocomplete="off" autofocus disabled>
+    <select id="kind">
+      <option value="0">すべて</option>
+      <option value="1">note (kind:1)</option>
+      <option value="6">repost (kind:6)</option>
+    </select>
+  </div>
+  <div class="meta" id="meta">DB を読み込み中…</div>
+
+  <main id="results"></main>
+
+  <address>
+    <a href="./">find mine fire</a> 🔥<br>
+    programmed by koteitan<br>
+    Source code is on <a href="https://github.com/koteitan/find-mine-fire">github</a><br>
+    powered by <a href="https://github.com/hoytech/strfry">strfry</a> +
+    <a href="https://sqlite.org/wasm">sqlite-wasm</a> (FTS5)
+  </address>
+
+<script type="module">
+import sqlite3InitModule from './vendor/sqlite3.mjs';
+const LIMIT = 300;
+let db = null, sqlite3 = null, total = 0;
+
+const $q = document.getElementById('q');
+const $kind = document.getElementById('kind');
+const $meta = document.getElementById('meta');
+const $res = document.getElementById('results');
+
+// ---- top-right menu + dark mode ----
+const $menuToggle = document.getElementById('menuToggle');
+const $menuDropdown = document.getElementById('menuDropdown');
+const $dark = document.getElementById('darkmode_d');
+$menuToggle.addEventListener('click', e=>{ e.stopPropagation(); $menuDropdown.classList.toggle('open'); });
+document.addEventListener('click', e=>{
+  if(!document.getElementById('menuContainer').contains(e.target)) $menuDropdown.classList.remove('open');
+});
+$dark.checked = document.documentElement.classList.contains('dark');
+$dark.addEventListener('change', ()=>{
+  document.documentElement.classList.toggle('dark', $dark.checked);
+  localStorage.setItem('darkmode', $dark.checked ? '1' : '0');
+});
+
+function esc(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function reEsc(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
+
+function renderContent(text, q){
+  let html = esc(text);
+  if(q){
+    try{ const re = new RegExp(reEsc(q),'gi'); html = html.replace(re, m=>'<mark>'+m+'</mark>'); }catch(e){}
+  }
+  html = html.replace(/(https?:\/\/[^\s<]+)/g, u=>{
+    const href = u.replace(/<\/?mark>/g,'');
+    return '<a class="link" href="'+href+'" target="_blank" rel="noopener">'+u+'</a>';
+  });
+  return html;
+}
+
+// ---- bech32 note1 encoding (NIP-19) for njump links ----
+const B32='qpzry9x8gf2tvdw0s3jn54khce6mua7l';
+function polymod(v){let c=1;for(const d of v){const b=c>>25;c=((c&0x1ffffff)<<5)^d;for(let i=0;i<5;i++) if((b>>i)&1) c^=[0x3b6a57b2,0x26508e6d,0x1ea119fa,0x3d4233dd,0x2a1462b3][i];}return c;}
+function hrpExpand(h){const o=[];for(const c of h)o.push(c.charCodeAt(0)>>5);o.push(0);for(const c of h)o.push(c.charCodeAt(0)&31);return o;}
+function checksum(hrp,data){const v=hrpExpand(hrp).concat(data).concat([0,0,0,0,0,0]);const m=polymod(v)^1;const o=[];for(let i=0;i<6;i++)o.push((m>>5*(5-i))&31);return o;}
+function toWords(bytes){let acc=0,bits=0;const out=[];for(const b of bytes){acc=(acc<<8)|b;bits+=8;while(bits>=5){bits-=5;out.push((acc>>bits)&31);}}if(bits>0)out.push((acc<<(5-bits))&31);return out;}
+function noteId(hex){const bytes=[];for(let i=0;i<hex.length;i+=2)bytes.push(parseInt(hex.substr(i,2),16));const words=toWords(bytes);const full=words.concat(checksum('note',words));return 'note1'+full.map(w=>B32[w]).join('');}
+
+function fmtDate(t){const d=new Date(t*1000);
+  return d.toLocaleString('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});}
+
+function run(){
+  if(!db) return;
+  const raw = $q.value.trim();
+  const k = parseInt($kind.value,10);
+  const kClause = k ? ' AND k='+k : '';
+  let sql, params, t0=performance.now();
+  if(raw.length===0){
+    sql='SELECT c,i,t,k FROM ev WHERE 1'+kClause+' ORDER BY t DESC LIMIT '+LIMIT; params=[];
+  }else if(raw.length>=3){
+    sql='SELECT c,i,t,k FROM ev WHERE ev MATCH ?'+kClause+' ORDER BY t DESC LIMIT '+LIMIT;
+    params=['"'+raw.replace(/"/g,'""')+'"'];
+  }else{
+    const like='%'+raw.replace(/[\\%_]/g,'\\$&')+'%';
+    sql="SELECT c,i,t,k FROM ev WHERE c LIKE ? ESCAPE '\\'"+kClause+' ORDER BY t DESC LIMIT '+LIMIT;
+    params=[like];
+  }
+  let rows=[];
+  try{ db.exec({ sql, bind: params.length?params:undefined, rowMode:'object', resultRows: rows }); }
+  catch(e){ $meta.textContent='検索エラー: '+e.message; return; }
+  render(rows, raw, (performance.now()-t0).toFixed(1));
+}
+
+function render(rows, q, ms){
+  $meta.innerHTML = `${rows.length}${rows.length>=LIMIT?'+':''} 件 / 全${total.toLocaleString()}件 · ${ms}ms`;
+  if(rows.length===0){ $res.innerHTML='<div class="empty">該当なし</div>'; return; }
+  const parts=[];
+  for(const r of rows){
+    const badge = r.k===6 ? '<span class="badge k6">repost</span>' : '<span class="badge k1">note</span>';
+    const njump = 'https://njump.me/'+noteId(r.i);
+    const body = r.k===6 && !String(r.c).trim() ? '<span style="color:var(--muted-color)">(リポスト)</span>' : renderContent(String(r.c), q);
+    parts.push(
+      '<div class="card"><div class="top">'+badge+
+      '<span>'+fmtDate(r.t)+'</span>'+
+      '<a href="'+njump+'" target="_blank" rel="noopener">njump ↗</a>'+
+      '</div><div class="content">'+body+'</div></div>');
+  }
+  $res.innerHTML=parts.join('');
+}
+
+let timer=null;
+$q.addEventListener('input', ()=>{ clearTimeout(timer); timer=setTimeout(run, 110); });
+$kind.addEventListener('change', run);
+
+try{
+  sqlite3 = await sqlite3InitModule();
+  const buf = new Uint8Array(await (await fetch('events.sqlite')).arrayBuffer());
+  const p = sqlite3.wasm.allocFromTypedArray(buf);
+  db = new sqlite3.oo1.DB();
+  const rc = sqlite3.capi.sqlite3_deserialize(
+    db.pointer, 'main', p, buf.byteLength, buf.byteLength,
+    sqlite3.capi.SQLITE_DESERIALIZE_FREEONCLOSE | sqlite3.capi.SQLITE_DESERIALIZE_RESIZEABLE);
+  db.checkRc(rc);
+  const tr=[]; db.exec({ sql:'SELECT count(*) n FROM ev', rowMode:'object', resultRows: tr });
+  total = tr[0].n;
+  $q.disabled=false; $q.focus();
+  run();
+}catch(e){
+  $meta.textContent='読み込み失敗: '+e.message+'（ローカルHTTPサーバ経由で開いてください）';
+}
+</script>
+</body>
+</html>

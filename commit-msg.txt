@@ -1,0 +1,11 @@
+find mine fire 🔥: nostr backup relay + FTS5 incremental search
+
+- Collect kind:1/6 via strfry NIP-77 Negentropy sync (sync.sh), npub and relays given as args
+- lib.sh: npub->hex decode, filter build, strfry runner (native or Docker)
+- build-db.sh/.py: index events into web/events.sqlite (FTS5 trigram)
+- stats.sh/.py: show collected-event statistics
+- web/: red-theme search page on sqlite-wasm (index.html, style.css, vendored sqlite3)
+- strfry.conf: set rejectEventsOlderThanSeconds to 100y so sync keeps old posts
+- run-relay.sh: serve the local strfry relay
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>

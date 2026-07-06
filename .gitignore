@@ -1,0 +1,10 @@
+# raw strfry LMDB database (large, regenerable via sync.sh)
+strfry-db/
+
+# generated search index (build via build-db.sh; add -f for Pages deploy)
+web/events.sqlite
+
+# logs / temp
+*.log
+.live-server-*.log
+dusort.txt
