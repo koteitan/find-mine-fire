@@ -2,11 +2,11 @@
 
 # find mine fire 🔥
 
-A toolset that collects any nostr user's `kind:1` / `kind:6` events from remote
-relays into a local strfry relay and offers **blazing-fast incremental search
-via SQLite (FTS5)**.
+A **local tool for ubuntu** that collects any nostr user's `kind:1` / `kind:6`
+events from remote relays into a local strfry relay and offers **blazing-fast
+incremental search via SQLite (FTS5)**. It runs as a **local server or on the CLI**.
 
-The **source npub and relays are given as arguments** (defaults: koteitan / x.kojira.io).
+The **source npub and relays are given as arguments** (**required**; it errors out if missing).
 
 ## How it works
 - **Sync**: NIP-77 Negentropy (`strfry sync`) — pulls only the diff efficiently and practically sidesteps rate limits.
@@ -21,6 +21,7 @@ The **source npub and relays are given as arguments** (defaults: koteitan / x.ko
 | `sync.sh` | Negentropy sync from remote into the local DB |
 | `build-db.sh` / `build-db.py` | build `web/events.sqlite` (FTS5) from the local DB |
 | `stats.sh` / `stats.py` | print statistics about collected events |
+| `findmine` | CLI for incremental search in the terminal |
 | `run-relay.sh` | start the local relay (ws://localhost:7777) to serve events |
 | `web/` | search page (`index.html` / `style.css` / `vendor/` sqlite-wasm) |
 
@@ -35,19 +36,26 @@ The **source npub and relays are given as arguments** (defaults: koteitan / x.ko
 # 3) Build the search index
 ./build-db.sh npub1f3w4x7...
 
-# 4) Serve web/ over a local HTTP server and open index.html
-#    (file:// breaks sqlite's fetch, so always use HTTP; avoid ports 8000/8080)
+# 4a) Search in a browser: serve web/ over a local HTTP server and open index.html
+#     (file:// breaks sqlite's fetch, so always use HTTP; avoid ports 8000/8080)
+
+# 4b) Search in the terminal (CLI)
+./findmine                 # incremental search (Up/Down move, Enter=njump, Esc quit)
+./findmine keyword         # one-shot search (with an arg or when piped)
+./findmine word --url --kind 1   # append njump URL / filter by kind
 
 # To serve as a local relay
 ./run-relay.sh
 ```
-Omitting the argument falls back to `NPUB_DEFAULT` / `RELAY_DEFAULT` (koteitan / x.kojira.io).
+`findmine` searches the `web/events.sqlite` built by `build-db.sh` (interactive TUI
+on a TTY, one-shot output when given args or piped).
+Missing npub / relay arguments cause an error exit (there are no built-in defaults).
 A raw hex pubkey may be passed instead of an npub.
 
 ### Environment variables
 - `SYNC_DIR=down|up|both` … sync direction (default: down)
 - `KINDS_DEFAULT=1,6` … kinds to collect
-- `SOURCE_RELAY` … default relay when no relay argument is given
+- `SOURCE_RELAY` … used only when no relay argument is given
 - `FORCE_DOCKER=1` … use Docker even if a native strfry exists
 
 ## Search behavior

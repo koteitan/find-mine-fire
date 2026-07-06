@@ -4,10 +4,11 @@
 ##          Source this after setting ROOT to the project dir.
 ##
 
-# Defaults (override with env or CLI args)
-: "${NPUB_DEFAULT:=npub1f3w4x7dqvceeez8kuyq78md3lwhwfm0ra634llr0r3nykwjrs0hqvldhgk}"
-: "${RELAY_DEFAULT:=wss://x.kojira.io}"
+# kinds to collect (override with env). No built-in npub/relay defaults:
+# the npub and relay(s) must be given explicitly.
 : "${KINDS_DEFAULT:=1,6}"
+
+die() { echo "error: $*" >&2; exit 1; }
 
 # npub_to_hex <npub|hex> -> prints 64-char hex pubkey
 npub_to_hex() {

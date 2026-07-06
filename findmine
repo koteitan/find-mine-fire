@@ -1,0 +1,162 @@
+#!/usr/bin/env python3
+"""find mine fire - terminal incremental search over web/events.sqlite (FTS5).
+
+Interactive (TTY):   ./findmine
+One-shot / pipe:     ./findmine "keyword"
+Options:             --db PATH  --kind 1|6  --limit N  --url
+
+Build the index first with:  ./build-db.sh <npub>
+"""
+import sqlite3, sys, os, argparse, time
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_DB = os.path.join(SCRIPT_DIR, "web", "events.sqlite")
+
+# ---- NIP-19 note1 (bech32) for njump links ----
+_B32 = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+def _polymod(values):
+    chk = 1
+    for v in values:
+        b = chk >> 25
+        chk = ((chk & 0x1ffffff) << 5) ^ v
+        for i, c in enumerate((0x3b6a57b2,0x26508e6d,0x1ea119fa,0x3d4233dd,0x2a1462b3)):
+            if (b >> i) & 1:
+                chk ^= c
+    return chk
+def _hrp_expand(hrp):
+    return [ord(c) >> 5 for c in hrp] + [0] + [ord(c) & 31 for c in hrp]
+def _to_words(data):
+    acc = bits = 0; out = []
+    for b in data:
+        acc = (acc << 8) | b; bits += 8
+        while bits >= 5:
+            bits -= 5; out.append((acc >> bits) & 31)
+    if bits:
+        out.append((acc << (5 - bits)) & 31)
+    return out
+def note1(hex_id):
+    data = bytes.fromhex(hex_id)
+    words = _to_words(data)
+    values = _hrp_expand("note") + words + [0]*6
+    pm = _polymod(values) ^ 1
+    chk = [(pm >> 5*(5-i)) & 31 for i in range(6)]
+    return "note1" + "".join(_B32[w] for w in words + chk)
+
+def open_db(path):
+    if not os.path.exists(path):
+        sys.exit(f"error: {path} not found. Build it with: ./build-db.sh <npub>")
+    db = sqlite3.connect(path)
+    db.text_factory = str
+    return db
+
+def search(db, q, kind, limit):
+    q = q.strip()
+    kclause = f" AND k={int(kind)}" if kind else ""
+    if not q:
+        sql = f"SELECT c,i,t,k FROM ev WHERE 1{kclause} ORDER BY t DESC LIMIT ?"
+        params = [limit]
+    elif len(q) >= 3:
+        sql = f"SELECT c,i,t,k FROM ev WHERE ev MATCH ?{kclause} ORDER BY t DESC LIMIT ?"
+        params = ['"' + q.replace('"', '""') + '"', limit]
+    else:
+        like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        sql = f"SELECT c,i,t,k FROM ev WHERE c LIKE ? ESCAPE '\\'{kclause} ORDER BY t DESC LIMIT ?"
+        params = [like, limit]
+    try:
+        return db.execute(sql, params).fetchall()
+    except sqlite3.OperationalError:
+        return []
+
+def oneshot(db, q, kind, limit, url):
+    for c, i, t, k in search(db, q, kind, limit):
+        date = time.strftime("%Y-%m-%d %H:%M", time.localtime(t))
+        tag = "RT" if k == 6 else "  "
+        snip = " ".join(str(c).split())
+        line = f"{date} {tag} {snip}"
+        if url:
+            line += f"  https://njump.me/{note1(i)}"
+        print(line)
+
+# ---- curses incremental TUI ----
+def tui(db, kind, limit):
+    import curses, locale
+    locale.setlocale(locale.LC_ALL, "")
+    picked = {"id": None}
+
+    def _run(scr):
+        curses.use_default_colors()
+        try: curses.curs_set(1)
+        except curses.error: pass
+        query = ""; sel = 0; top = 0
+        while True:
+            rows = search(db, query, kind, limit)
+            if sel >= len(rows): sel = max(0, len(rows) - 1)
+            if sel < 0: sel = 0
+            h, w = scr.getmaxyx()
+            scr.erase()
+            head = f"find mine fire  {len(rows)} hits   [Up/Down move  Enter njump  Esc quit]"
+            try: scr.addnstr(0, 0, head, w - 1, curses.A_BOLD)
+            except curses.error: pass
+            try: scr.addnstr(1, 0, "> " + query, w - 1)
+            except curses.error: pass
+            list_h = max(1, h - 3)
+            if sel < top: top = sel
+            if sel >= top + list_h: top = sel - list_h + 1
+            for idx in range(top, min(len(rows), top + list_h)):
+                c, i, t, k = rows[idx]
+                date = time.strftime("%Y-%m-%d %H:%M", time.localtime(t))
+                tag = "RT" if k == 6 else "  "
+                line = f"{date} {tag} " + " ".join(str(c).split())
+                attr = curses.A_REVERSE if idx == sel else curses.A_NORMAL
+                try: scr.addnstr(3 + idx - top, 0, line, w - 1, attr)
+                except curses.error: pass
+            scr.refresh()
+            try:
+                ch = scr.get_wch()
+            except KeyboardInterrupt:
+                return
+            except curses.error:
+                continue
+            if isinstance(ch, str):
+                if ch in ("\n", "\r"):
+                    if rows: picked["id"] = rows[sel][1]
+                    return
+                elif ch in ("\x7f", "\b", "\x08"):
+                    query = query[:-1]; sel = 0
+                elif ch in ("\x1b", "\x03"):
+                    return
+                elif ch.isprintable():
+                    query += ch; sel = 0
+            else:
+                if ch in (curses.KEY_BACKSPACE,):
+                    query = query[:-1]; sel = 0
+                elif ch == curses.KEY_UP: sel -= 1
+                elif ch == curses.KEY_DOWN: sel += 1
+                elif ch == curses.KEY_PPAGE: sel -= (h - 3)
+                elif ch == curses.KEY_NPAGE: sel += (h - 3)
+                elif ch == curses.KEY_HOME: sel = 0
+    try:
+        curses.wrapper(_run)
+    except KeyboardInterrupt:
+        pass
+    if picked["id"]:
+        print(f"https://njump.me/{note1(picked['id'])}")
+
+def main():
+    ap = argparse.ArgumentParser(description="find mine fire - terminal search")
+    ap.add_argument("query", nargs="*", help="search keyword (one-shot); omit for interactive")
+    ap.add_argument("--db", default=DEFAULT_DB, help=f"sqlite path (default: {DEFAULT_DB})")
+    ap.add_argument("--kind", type=int, choices=(1, 6), help="filter kind (1=note, 6=repost)")
+    ap.add_argument("--limit", type=int, default=500, help="max rows (default: 500)")
+    ap.add_argument("--url", action="store_true", help="append njump URL (one-shot mode)")
+    args = ap.parse_args()
+
+    db = open_db(args.db)
+    q = " ".join(args.query).strip()
+    if q or not sys.stdout.isatty():
+        oneshot(db, q, args.kind, args.limit, args.url)
+    else:
+        tui(db, args.kind, args.limit)
+
+if __name__ == "__main__":
+    main()

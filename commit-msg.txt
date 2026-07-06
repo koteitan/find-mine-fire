@@ -1,6 +1,8 @@
-docs: switch to Japanese-main README (README.md JA, README-en.md EN)
+feat: add findmine CLI; require npub/relay args; refine description
 
-- Make README.md the Japanese main with [Japanese]|[English] header
-- Add README-en.md for English, remove README-ja.md
+- Add findmine: terminal incremental search (curses TUI + one-shot) over web/events.sqlite
+- Require npub/relay args in sync.sh/build-db.sh/stats.sh; error out with no built-in defaults
+- lib.sh: drop koteitan/x.kojira.io defaults, add die() helper
+- README: describe as ubuntu-local tool (local server or CLI), document findmine
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>

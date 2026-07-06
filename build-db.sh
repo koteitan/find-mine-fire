@@ -4,13 +4,13 @@
 ##
 ## Usage:
 ##   ./build-db.sh <npub>
-##   ./build-db.sh            # NPUB_DEFAULT
 ##
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"; export ROOT
 source "$ROOT/lib.sh"
 
-NPUB="${1:-$NPUB_DEFAULT}"
+NPUB="${1:-}"
+[ -n "$NPUB" ] || die "npub required. usage: ./build-db.sh <npub>"
 HEX="$(npub_to_hex "$NPUB")"
 FILTER="$(make_filter "$HEX")"
 
