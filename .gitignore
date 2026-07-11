@@ -8,3 +8,5 @@ web/events.sqlite
 *.log
 .live-server-*.log
 dusort.txt
+__pycache__/
+.relay.pid

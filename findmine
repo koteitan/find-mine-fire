@@ -7,7 +7,7 @@ Options:             --db PATH  --kind 1|6  --limit N  --url
 
 Build the index first with:  ./build-db.sh <npub>
 """
-import sqlite3, sys, os, argparse, time
+import sqlite3, sys, os, argparse, time, unicodedata
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_DB = os.path.join(SCRIPT_DIR, "web", "events.sqlite")
@@ -78,15 +78,63 @@ def oneshot(db, q, kind, limit, url):
         print(line)
 
 # ---- curses incremental TUI ----
+def _dwidth(ch):
+    if unicodedata.combining(ch):
+        return 0
+    return 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
+
+def _hl_segments(text, query, base, match):
+    """Split text into (chunk, attr) segments, highlighting query (case-insensitive)."""
+    if not query:
+        return [(text, base)]
+    segs = []; low = text.lower(); ql = query.lower(); i = 0
+    while i < len(text):
+        j = low.find(ql, i)
+        if j == -1:
+            segs.append((text[i:], base)); break
+        if j > i:
+            segs.append((text[i:j], base))
+        segs.append((text[j:j+len(query)], match))
+        i = j + len(query)
+    return segs
+
+def _draw_segments(scr, y, x, budget, segments):
+    """Draw segments on line y, clipping by display width (CJK-aware)."""
+    import curses
+    col = x; limit_col = x + budget
+    for text, attr in segments:
+        for ch in text:
+            cw = _dwidth(ch)
+            if col + cw > limit_col:
+                return
+            try:
+                scr.addstr(y, col, ch, attr)
+            except curses.error:
+                return
+            col += cw
+
 def tui(db, kind, limit):
     import curses, locale
     locale.setlocale(locale.LC_ALL, "")
     picked = {"id": None}
 
     def _run(scr):
-        curses.use_default_colors()
         try: curses.curs_set(1)
         except curses.error: pass
+        has_color = False
+        try:
+            curses.start_color(); curses.use_default_colors()
+            curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_YELLOW)
+            has_color = curses.has_colors()
+        except curses.error:
+            has_color = False
+        if has_color:
+            MATCH = curses.color_pair(1) | curses.A_BOLD
+            SEL = curses.A_REVERSE
+        else:
+            MATCH = curses.A_REVERSE | curses.A_BOLD
+            SEL = curses.A_BOLD
+
         query = ""; sel = 0; top = 0
         while True:
             rows = search(db, query, kind, limit)
@@ -106,10 +154,12 @@ def tui(db, kind, limit):
                 c, i, t, k = rows[idx]
                 date = time.strftime("%Y-%m-%d %H:%M", time.localtime(t))
                 tag = "RT" if k == 6 else "  "
-                line = f"{date} {tag} " + " ".join(str(c).split())
-                attr = curses.A_REVERSE if idx == sel else curses.A_NORMAL
-                try: scr.addnstr(3 + idx - top, 0, line, w - 1, attr)
-                except curses.error: pass
+                base = SEL if idx == sel else curses.A_NORMAL
+                content = " ".join(str(c).split())
+                indicator = "▶ " if idx == sel else "  "
+                segs = [(indicator, base), (f"{date} {tag} ", base)]
+                segs += _hl_segments(content, query, base, MATCH)
+                _draw_segments(scr, 3 + idx - top, 0, w - 1, segs)
             scr.refresh()
             try:
                 ch = scr.get_wch()
